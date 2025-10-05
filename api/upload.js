@@ -1,14 +1,11 @@
 const express = require('express');
-const cors = require('cors');
 const multer = require('multer');
 const { google } = require('googleapis');
 const stream = require('stream');
-const fetch = require('node-fetch');
 
 const app = express();
 const upload = multer({ storage: multer.memoryStorage() });
 
-app.use(cors());
 app.use(express.json());
 
 // Service Account Configuration (hardcoded)
@@ -27,7 +24,6 @@ const SERVICE_ACCOUNT = {
 };
 
 const PARENT_FOLDER_ID = '1BFqwE2fk-IFAb3XgkVyq3vQf_F76xQYp';
-const CHATGPT_KEY = "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";
 
 // Google Drive setup
 const auth = new google.auth.GoogleAuth({
@@ -36,13 +32,12 @@ const auth = new google.auth.GoogleAuth({
 });
 const drive = google.drive({ version: 'v3', auth });
 
-// simple root to prevent 404 on the domain root
+// root responds to /api/upload when this file is mounted at /api/upload
 app.get('/', (req, res) => {
-  res.json({ status: 'ok', message: 'EduGuru backend is running' });
+  res.json({ status: 'ok', message: 'Upload function ready' });
 });
 
-// Upload endpoint
-app.post('/upload', upload.single('file'), async (req, res) => {
+app.post('/', upload.single('file'), async (req, res) => {
   try {
     const file = req.file;
     const { month, day, subject } = req.body;
@@ -102,43 +97,4 @@ app.post('/upload', upload.single('file'), async (req, res) => {
   }
 });
 
-// Chat endpoint for ChatGPT
-app.post('/chat', async (req, res) => {
-  try {
-    const { message } = req.body;
-
-    if (!message) {
-      return res.status(400).json({ error: 'Message is required' });
-    }
-
-    const response = await fetch(
-      "https://api.openai.com/v1/chat/completions",
-      {
-        method: "POST",
-        headers: {
-          'Authorization': 'Bearer ' + CHATGPT_KEY,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          model: "gpt-3.5-turbo",
-          messages: [{ role: "user", content: message }],
-          max_tokens: 200
-        })
-      }
-    );
-
-    const data = await response.json();
-    const aiResponse = data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content
-      ? data.choices[0].message.content
-      : "No response";
-
-    res.json({ response: aiResponse });
-
-  } catch (error) {
-    console.error('Chat error:', error);
-    res.status(500).json({ error: String(error.message || error) });
-  }
-});
-
-// export app for Vercel serverless
 module.exports = app;
