@@ -36,6 +36,11 @@ const auth = new google.auth.GoogleAuth({
 });
 const drive = google.drive({ version: 'v3', auth });
 
+// simple root to prevent 404 on the domain root
+app.get('/', (req, res) => {
+  res.json({ status: 'ok', message: 'EduGuru backend is running' });
+});
+
 // Upload endpoint
 app.post('/upload', upload.single('file'), async (req, res) => {
   try {
@@ -55,7 +60,7 @@ app.post('/upload', upload.single('file'), async (req, res) => {
         fields: 'files(id, name)'
       });
 
-      if (response.data.files.length > 0) {
+      if (response.data && response.data.files && response.data.files.length > 0) {
         parentId = response.data.files[0].id;
       } else {
         const folder = await drive.files.create({
@@ -92,4 +97,48 @@ app.post('/upload', upload.single('file'), async (req, res) => {
     });
 
   } catch (error) {
-    console.error
+    console.error('Upload error:', error);
+    res.status(500).json({ error: String(error.message || error) });
+  }
+});
+
+// Chat endpoint for ChatGPT
+app.post('/chat', async (req, res) => {
+  try {
+    const { message } = req.body;
+
+    if (!message) {
+      return res.status(400).json({ error: 'Message is required' });
+    }
+
+    const response = await fetch(
+      "https://api.openai.com/v1/chat/completions",
+      {
+        method: "POST",
+        headers: {
+          'Authorization': 'Bearer ' + CHATGPT_KEY,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          model: "gpt-3.5-turbo",
+          messages: [{ role: "user", content: message }],
+          max_tokens: 200
+        })
+      }
+    );
+
+    const data = await response.json();
+    const aiResponse = data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content
+      ? data.choices[0].message.content
+      : "No response";
+
+    res.json({ response: aiResponse });
+
+  } catch (error) {
+    console.error('Chat error:', error);
+    res.status(500).json({ error: String(error.message || error) });
+  }
+});
+
+// export app for Vercel serverless
+module.exports = app;
