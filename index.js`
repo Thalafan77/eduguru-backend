@@ -3,6 +3,7 @@ const cors = require('cors');
 const multer = require('multer');
 const { google } = require('googleapis');
 const stream = require('stream');
+const fetch = require('node-fetch');
 
 const app = express();
 const upload = multer({ storage: multer.memoryStorage() });
@@ -10,7 +11,7 @@ const upload = multer({ storage: multer.memoryStorage() });
 app.use(cors());
 app.use(express.json());
 
-// Service Account Configuration
+// Service Account Configuration (hardcoded)
 const SERVICE_ACCOUNT = {
   "type": "service_account",
   "project_id": "eduguru-drive",
@@ -26,17 +27,14 @@ const SERVICE_ACCOUNT = {
 };
 
 const PARENT_FOLDER_ID = '1BFqwE2fk-IFAb3XgkVyq3vQf_F76xQYp';
+const CHATGPT_KEY = "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";
 
-// Initialize Google Drive with Service Account
+// Google Drive setup
 const auth = new google.auth.GoogleAuth({
   credentials: SERVICE_ACCOUNT,
   scopes: ['https://www.googleapis.com/auth/drive.file']
 });
-
 const drive = google.drive({ version: 'v3', auth });
-
-// ChatGPT Configuration
-const CHATGPT_KEY = "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";
 
 // Upload endpoint
 app.post('/upload', upload.single('file'), async (req, res) => {
@@ -48,7 +46,6 @@ app.post('/upload', upload.single('file'), async (req, res) => {
       return res.status(400).json({ error: 'Missing required fields' });
     }
 
-    // Create folder structure: month/Day X/subject
     const path = [month, `Day ${day}`, subject];
     let parentId = PARENT_FOLDER_ID;
 
@@ -73,77 +70,26 @@ app.post('/upload', upload.single('file'), async (req, res) => {
       }
     }
 
-    // Upload file
     const bufferStream = new stream.PassThrough();
     bufferStream.end(file.buffer);
 
-    const fileMetadata = {
-      name: file.originalname,
-      parents: [parentId]
-    };
-
-    const media = {
-      mimeType: file.mimetype,
-      body: bufferStream
-    };
-
     const uploadedFile = await drive.files.create({
-      resource: fileMetadata,
-      media: media,
+      resource: {
+        name: file.originalname,
+        parents: [parentId]
+      },
+      media: {
+        mimeType: file.mimetype,
+        body: bufferStream
+      },
       fields: 'id, name'
     });
 
-    res.json({ 
-      success: true, 
+    res.json({
+      success: true,
       fileName: uploadedFile.data.name,
       fileId: uploadedFile.data.id
     });
 
   } catch (error) {
-    console.error('Upload error:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Chat endpoint for ChatGPT
-app.post('/chat', async (req, res) => {
-  try {
-    const { message } = req.body;
-
-    if (!message) {
-      return res.status(400).json({ error: 'Message is required' });
-    }
-
-    const response = await fetch(
-      "https://api.openai.com/v1/chat/completions",
-      {
-        method: "POST",
-        headers: {
-          'Authorization': 'Bearer ' + CHATGPT_KEY,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          model: "gpt-3.5-turbo",
-          messages: [{role: "user", content: message}],
-          max_tokens: 200
-        })
-      }
-    );
-
-    const data = await response.json();
-    const aiResponse = data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content
-      ? data.choices[0].message.content
-      : "No response";
-
-    res.json({ response: aiResponse });
-
-  } catch (error) {
-    console.error('Chat error:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-const PORT = 3000;
-app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
-});
+    console.error
